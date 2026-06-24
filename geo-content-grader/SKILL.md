@@ -278,70 +278,97 @@ AI Citability * 0.45
 + Platform Content Fit * 0.20
 ```
 
+## Report File Output
+
+Always save the completed analysis as a Markdown file. Preserve the report
+structure exactly as defined in the Output Format section; only change the
+delivery method from an inline answer to a `.md` file.
+
+- If the user provides an output path or filename, write the report there.
+- Otherwise write the report to the current working directory as
+  `GEO-CONTENT-GRADER-ANALYSIS.md`.
+- If that filename already exists, create a timestamped filename such as
+  `GEO-CONTENT-GRADER-ANALYSIS-YYYYMMDD-HHMM.md` instead of overwriting unless
+  the user explicitly asks to replace it.
+- The final chat response should be brief: include the saved file path and the
+  final Article GEO Score. Do not duplicate the full report inline unless the
+  user asks for it.
+
 ## Output Format
 
-Use this structure unless the user asks otherwise:
+Use this Chinese-first structure unless the user asks otherwise. Keep English
+only where it helps identify stable metric names, platform names, filenames,
+quoted headings, source labels, or technical terms. Write findings, status,
+strengths, deductions, fixes, and the overall judgment primarily in Chinese.
 
 ```markdown
 ## Article GEO Score: XX/100
 
 | Branch | Score | Weight | Weighted | Status |
 |---|---:|---:|---:|---|
-| AI Citability | XX/100 | 40% | XX | ... |
-| Content / E-E-A-T | XX/100 | 30% | XX | ... |
-| Platform Content Fit | XX/100 | 20% | XX | ... |
-| Brand Entity Consistency | XX/100 | 10% | XX | ... |
+| AI Citability | XX/100 | 40% | XX | 强/中等/弱 |
+| Content / E-E-A-T | XX/100 | 30% | XX | 强/中等/弱 |
+| Platform Content Fit | XX/100 | 20% | XX | 强/中等/弱 |
+| Brand Entity Consistency | XX/100 或 N/A | 10% | XX | 强/中等/弱/不适用 |
 
-### 1. AI Citability
+**文件：** [输入文章文件名或 URL]
+
+### 1. AI Citability: XX/100
+
 | Dimension | Score | Weight | Weighted |
 |---|---:|---:|---:|
 | Answer Block Quality | XX/100 | 30% | XX |
 | Passage Self-Containment | XX/100 | 25% | XX |
 | Structural Readability | XX/100 | 20% | XX |
-| Statistical Density | XX/100 | 15% | XX |
+| Statistical / Factual Density | XX/100 | 15% | XX |
 | Uniqueness & Original Data | XX/100 | 10% | XX |
 
-Strongest passages:
-- ...
+**强项：** 用中文概括 1-3 个最有利于 AI 摘取/引用的结构或段落，例如问题式标题、直接答案、FAQ、Key Facts、对比表、实体关系表等。
 
-Weakest passages:
-- ...
+**主要扣分：** 用中文说明 1-3 个影响可引用性的缺口，例如原创数据不足、段落不够自包含、统计/事实密度偏低、缺少可验证来源等。
 
-### 2. Content / E-E-A-T
+### 2. Content / E-E-A-T: XX/100
+
 | Dimension | Score | Max | Finding |
 |---|---:|---:|---|
-| Experience | XX | 25 | ... |
-| Expertise | XX | 25 | ... |
-| Authoritativeness | XX | 25 | ... |
-| Trustworthiness | XX | 25 | ... |
+| Experience | XX | 25 | 中文说明一手经验、实测、案例、方法论是否充分 |
+| Expertise | XX | 25 | 中文说明实体关系、术语、边界解释、专业深度 |
+| Authoritativeness | XX | 25 | 中文说明官方、监管、公告、权威来源支撑 |
+| Trustworthiness | XX | 25 | 中文说明作者、发布时间、更新时间、披露、来源列表 |
 
-Article-visible schema-equivalent notes:
-- ...
+用中文写一段简短判断，说明这篇文章在经验、专业性、权威性和可信度上的整体表现。保留必要的英文术语或页面栏目名，例如 `Key Facts`、`Deployment note`、`llms.txt entry`。
 
-### 3. Platform Content Fit
+### 3. Platform Content Fit: XX/100
+
 | Platform | Content-Only Score | Main Gap |
 |---|---:|---|
-| Google AI Overviews | XX/100 | ... |
-| ChatGPT Search | XX/100 | ... |
-| Perplexity | XX/100 | ... |
-| Gemini | XX/100 | ... |
-| Bing Copilot | XX/100 | ... |
+| Google AI Overviews | XX/100 | 中文说明主要优势或缺口 |
+| ChatGPT Search | XX/100 | 中文说明主要优势或缺口 |
+| Perplexity | XX/100 | 中文说明主要优势或缺口 |
+| Gemini | XX/100 | 中文说明主要优势或缺口 |
+| Bing Copilot | XX/100 | 中文说明主要优势或缺口 |
 
-### 4. Brand Entity Consistency
-| Entity | Article Claim | Public Source / Evidence | Match | Notes |
-|---|---|---|---|---|
-| ... | ... | ... | ... | ... |
+**最值得补的是：** 用中文提出一个最能提升多平台适配度的内容补强点，例如实体关系图、流程图、图片 alt、原创数据、FAQ、摘要式开头等。
+
+### 4. Brand Entity Consistency: XX/100 或 N/A
+
+核心实体关系整体一致/存在以下风险：
+
+| Entity | Article Claim | Public Evidence | Match |
+|---|---|---|---|
+| 实体名 | 文章中的主张或描述 | 官方来源、监管页面、公告或可信公开证据 | Yes/No/Limited |
+
+用中文补充说明是否存在实体名称、母子公司、品牌/产品、牌照、创始人、地区、发行方、收购关系等方面的不一致或需要澄清处。
 
 ### Priority Fixes
-1. ...
-2. ...
-3. ...
+1. 用中文写最优先修改项。
+2. 用中文写第二优先修改项。
+3. 用中文写第三优先修改项。
+4. 如有必要，继续列出 4-5 条，但避免过长。
 
-### Branch Reports
-- Citability: ...
-- Content / E-E-A-T: ...
-- Platform Content Fit: ...
-- Brand Entity Consistency: ...
+### 总体判断
+
+用中文写 1 段总评：说明这篇文章是否已经适合 AI 搜索理解、摘取和引用；最主要的提升空间是什么。避免泛泛而谈，要点名具体内容结构或事实支撑缺口。
 ```
 
 ## Interpretation

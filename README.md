@@ -29,3 +29,14 @@ Content/E-E-A-T, platform content fit, and brand/entity consistency separate.
 It intentionally excludes full-site audit, technical SEO, crawler access,
 llms.txt, and full schema scoring unless those signals are visible from the
 article itself.
+
+## Output
+
+The grader preserves the existing Markdown report structure and now writes the
+completed analysis directly to a `.md` file. By default it saves
+`GEO-CONTENT-GRADER-ANALYSIS.md` in the current working directory, using a
+timestamped filename when that file already exists.
+
+Reports use a Chinese-first style: scoring dimensions, platform names, and
+technical labels may stay in English, while findings, deductions, fixes, and
+overall judgment are written primarily in Chinese.
