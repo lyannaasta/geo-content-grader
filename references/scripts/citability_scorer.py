@@ -1,32 +1,63 @@
 #!/usr/bin/env python3
 """
-Citability Scorer — Analyzes content blocks for AI citation readiness.
-Scores passages based on how likely AI models are to cite them.
+Citability Scorer - analyzes content blocks for AI citation readiness.
 
-Based on research showing optimal AI-cited passages are:
-- 134-167 words long
-- Self-contained (extractable without context)
-- Fact-rich with specific statistics
-- Structured with clear answer patterns
+Profiles:
+- global_default: original global/English scoring using word-count thresholds.
+- cn_mainland: Mainland Chinese scoring using Chinese character thresholds,
+  Chinese answer patterns, mainland factual markers, and entity explicitness.
 """
 
-import sys
 import json
 import re
+import sys
 from typing import Optional
 
 try:
     import requests
     from bs4 import BeautifulSoup
 except ImportError:
-    print("ERROR: Required packages not installed. Run: pip install -r requirements.txt")
-    sys.exit(1)
+    requests = None
+    BeautifulSoup = None
 
 
-def score_passage(text: str, heading: Optional[str] = None) -> dict:
+SUPPORTED_PROFILES = {"global_default", "cn_mainland"}
+
+
+def count_cjk_chars(text: str) -> int:
+    """Count CJK ideographs and common full-width punctuation."""
+    return len(re.findall(r"[\u4e00-\u9fff，。！？；：、（）《》“”‘’]", text))
+
+
+def split_sentences(text: str) -> list[str]:
+    """Split English or Chinese text into rough sentence units."""
+    return [s.strip() for s in re.split(r"[.!?。！？]+", text) if s.strip()]
+
+
+def normalize_profile(profile: Optional[str], text: str = "") -> str:
+    """Return a supported scoring profile, auto-detecting Chinese when omitted."""
+    if profile:
+        profile = profile.strip()
+    if profile in SUPPORTED_PROFILES:
+        return profile
+    if count_cjk_chars(text) >= 80:
+        return "cn_mainland"
+    return "global_default"
+
+
+def score_passage(text: str, heading: Optional[str] = None, profile: Optional[str] = None) -> dict:
     """Score a single passage for AI citability (0-100)."""
+    active_profile = normalize_profile(profile, text)
+    if active_profile == "cn_mainland":
+        return score_cn_mainland_passage(text, heading)
+    return score_global_default_passage(text, heading)
+
+
+def score_global_default_passage(text: str, heading: Optional[str] = None) -> dict:
+    """Score one passage using the original global/default rubric."""
     words = text.split()
     word_count = len(words)
+    sentences = split_sentences(text)
 
     scores = {
         "answer_block_quality": 0,
@@ -36,10 +67,7 @@ def score_passage(text: str, heading: Optional[str] = None) -> dict:
         "uniqueness_signals": 0,
     }
 
-    # === 1. Answer Block Quality (30%) ===
     abq_score = 0
-
-    # Check for definition patterns ("X is...", "X refers to...", "X means...")
     definition_patterns = [
         r"\b\w+\s+is\s+(?:a|an|the)\s",
         r"\b\w+\s+refers?\s+to\s",
@@ -47,16 +75,13 @@ def score_passage(text: str, heading: Optional[str] = None) -> dict:
         r"\b\w+\s+(?:can be |are )?defined\s+as\s",
         r"\bin\s+(?:simple|other)\s+(?:terms|words)\s*,",
     ]
-    for pattern in definition_patterns:
-        if re.search(pattern, text, re.IGNORECASE):
-            abq_score += 15
-            break
+    if any(re.search(pattern, text, re.IGNORECASE) for pattern in definition_patterns):
+        abq_score += 15
 
-    # Check if answer appears early (first 60 words)
     first_60_words = " ".join(words[:60])
     if any(
-        re.search(p, first_60_words, re.IGNORECASE)
-        for p in [
+        re.search(pattern, first_60_words, re.IGNORECASE)
+        for pattern in [
             r"\b(?:is|are|was|were|means?|refers?)\b",
             r"\d+%",
             r"\$[\d,]+",
@@ -65,20 +90,13 @@ def score_passage(text: str, heading: Optional[str] = None) -> dict:
     ):
         abq_score += 15
 
-    # Question-based heading bonus
     if heading and heading.endswith("?"):
         abq_score += 10
 
-    # Clear, direct sentence structure
-    sentences = re.split(r"[.!?]+", text)
-    short_clear_sentences = sum(
-        1 for s in sentences if 5 <= len(s.split()) <= 25
-    )
     if sentences:
-        clarity_ratio = short_clear_sentences / len(sentences)
-        abq_score += int(clarity_ratio * 10)
+        short_clear_sentences = sum(1 for s in sentences if 5 <= len(s.split()) <= 25)
+        abq_score += int((short_clear_sentences / len(sentences)) * 10)
 
-    # Has specific, quotable claim
     if re.search(
         r"(?:according to|research shows|studies? (?:show|indicate|suggest|found)|data (?:shows|indicates|suggests))",
         text,
@@ -88,10 +106,7 @@ def score_passage(text: str, heading: Optional[str] = None) -> dict:
 
     scores["answer_block_quality"] = min(abq_score, 30)
 
-    # === 2. Self-Containment (25%) ===
     sc_score = 0
-
-    # Optimal word count (134-167 words)
     if 134 <= word_count <= 167:
         sc_score += 10
     elif 100 <= word_count <= 200:
@@ -103,7 +118,6 @@ def score_passage(text: str, heading: Optional[str] = None) -> dict:
     else:
         sc_score += 2
 
-    # Low pronoun density (fewer pronouns = more self-contained)
     pronoun_count = len(
         re.findall(
             r"\b(?:it|they|them|their|this|that|these|those|he|she|his|her)\b",
@@ -120,7 +134,6 @@ def score_passage(text: str, heading: Optional[str] = None) -> dict:
         elif pronoun_ratio < 0.06:
             sc_score += 3
 
-    # Contains named entities (proper nouns, brands, specific terms)
     proper_nouns = len(re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b", text))
     if proper_nouns >= 3:
         sc_score += 7
@@ -129,10 +142,7 @@ def score_passage(text: str, heading: Optional[str] = None) -> dict:
 
     scores["self_containment"] = min(sc_score, 25)
 
-    # === 3. Structural Readability (20%) ===
     sr_score = 0
-
-    # Sentence count and length distribution
     if sentences:
         avg_sentence_length = word_count / len(sentences)
         if 10 <= avg_sentence_length <= 20:
@@ -142,41 +152,32 @@ def score_passage(text: str, heading: Optional[str] = None) -> dict:
         else:
             sr_score += 2
 
-    # Contains list-like structures
     if re.search(r"(?:first|second|third|finally|additionally|moreover|furthermore)", text, re.IGNORECASE):
         sr_score += 4
-
-    # Contains numbered items or bullet-like content
     if re.search(r"(?:\d+[\.\)]\s|\b(?:step|tip|point)\s+\d+)", text, re.IGNORECASE):
         sr_score += 4
-
-    # Paragraph breaks (indicates structure)
     if "\n" in text:
         sr_score += 4
 
     scores["structural_readability"] = min(sr_score, 20)
 
-    # === 4. Statistical Density (15%) ===
     sd_score = 0
-
-    # Percentages
-    pct_count = len(re.findall(r"\d+(?:\.\d+)?%", text))
-    sd_score += min(pct_count * 3, 6)
-
-    # Dollar amounts
-    dollar_count = len(re.findall(r"\$[\d,]+(?:\.\d+)?(?:\s*(?:million|billion|M|B|K))?", text))
-    sd_score += min(dollar_count * 3, 5)
-
-    # Other numbers with context
-    number_count = len(re.findall(r"\b\d+(?:,\d{3})*(?:\.\d+)?\s+(?:users|customers|pages|sites|companies|businesses|people|percent|times|x\b)", text, re.IGNORECASE))
-    sd_score += min(number_count * 2, 4)
-
-    # Year references (indicates timeliness)
-    year_count = len(re.findall(r"\b20(?:2[3-6]|1\d)\b", text))
-    if year_count > 0:
+    sd_score += min(len(re.findall(r"\d+(?:\.\d+)?%", text)) * 3, 6)
+    sd_score += min(len(re.findall(r"\$[\d,]+(?:\.\d+)?(?:\s*(?:million|billion|M|B|K))?", text)) * 3, 5)
+    sd_score += min(
+        len(
+            re.findall(
+                r"\b\d+(?:,\d{3})*(?:\.\d+)?\s+(?:users|customers|pages|sites|companies|businesses|people|percent|times|x\b)",
+                text,
+                re.IGNORECASE,
+            )
+        )
+        * 2,
+        4,
+    )
+    if re.search(r"\b20(?:2[3-6]|1\d)\b", text):
         sd_score += 2
 
-    # Named sources
     source_patterns = [
         r"(?:according to|per|from|by)\s+[A-Z]",
         r"(?:Gartner|Forrester|McKinsey|Harvard|Stanford|MIT|Google|Microsoft|OpenAI|Anthropic)",
@@ -188,35 +189,158 @@ def score_passage(text: str, heading: Optional[str] = None) -> dict:
 
     scores["statistical_density"] = min(sd_score, 15)
 
-    # === 5. Uniqueness Signals (10%) ===
     us_score = 0
-
-    # Original data indicators
     if re.search(
         r"(?:our (?:research|study|data|analysis|survey|findings)|we (?:found|discovered|analyzed|surveyed|measured))",
         text,
         re.IGNORECASE,
     ):
         us_score += 5
-
-    # Case study or example indicators
-    if re.search(
-        r"(?:case study|for example|for instance|in practice|real-world|hands-on)",
-        text,
-        re.IGNORECASE,
-    ):
+    if re.search(r"(?:case study|for example|for instance|in practice|real-world|hands-on)", text, re.IGNORECASE):
         us_score += 3
-
-    # Specific tool/product mentions (shows practical experience)
     if re.search(r"(?:using|with|via|through)\s+[A-Z][a-z]+", text):
         us_score += 2
 
     scores["uniqueness_signals"] = min(us_score, 10)
+    return build_passage_result("global_default", text, heading, sum(scores.values()), scores, word_count=word_count)
 
-    # === Calculate total ===
-    total = sum(scores.values())
 
-    # Determine grade
+def score_cn_mainland_passage(text: str, heading: Optional[str] = None) -> dict:
+    """Score one Chinese passage using the cn_mainland rubric."""
+    cjk_count = count_cjk_chars(text)
+    sentences = split_sentences(text)
+
+    scores = {
+        "answer_block_quality": 0,
+        "self_containment": 0,
+        "structural_readability": 0,
+        "statistical_density": 0,
+        "uniqueness_signals": 0,
+    }
+
+    abq_score = 0
+    answer_patterns = [
+        r"[\u4e00-\u9fffA-Za-z0-9]+是",
+        r"[\u4e00-\u9fffA-Za-z0-9]+指",
+        r"[\u4e00-\u9fffA-Za-z0-9]+适用于",
+        r"区别在于",
+        r"关键看",
+        r"应优先",
+        r"核心是",
+    ]
+    if any(re.search(pattern, text) for pattern in answer_patterns):
+        abq_score += 15
+
+    first_two_sentences = "。".join(sentences[:2])
+    if first_two_sentences and any(re.search(pattern, first_two_sentences) for pattern in answer_patterns):
+        abq_score += 10
+
+    if heading and re.search(r"[？?]$|^(什么是|如何|怎么|为什么|是否|哪些|哪种)", heading):
+        abq_score += 5
+
+    if re.search(r"(根据|据|显示|发布|规定|要求|数据|报告|公告|标准)", first_two_sentences):
+        abq_score += 5
+
+    if sentences:
+        concise_sentences = sum(1 for sentence in sentences if 15 <= count_cjk_chars(sentence) <= 90)
+        abq_score += min(int((concise_sentences / len(sentences)) * 8), 8)
+
+    scores["answer_block_quality"] = min(abq_score, 30)
+
+    sc_score = 0
+    if 120 <= cjk_count <= 350:
+        sc_score += 10
+    elif 80 <= cjk_count <= 500:
+        sc_score += 7
+    elif cjk_count < 50 or cjk_count > 700:
+        sc_score += 0
+    else:
+        sc_score += 3
+
+    weak_refs = len(re.findall(r"(它|这个|该平台|上述|这些|相关|其|该)", text))
+    if cjk_count > 0:
+        ref_ratio = weak_refs / cjk_count
+        if ref_ratio < 0.005:
+            sc_score += 7
+        elif ref_ratio < 0.015:
+            sc_score += 5
+        elif ref_ratio < 0.025:
+            sc_score += 2
+
+    entity_patterns = [
+        r"[\u4e00-\u9fff]{2,}(?:公司|集团|平台|系统|模型|标准|办法|规定|通知|方案)",
+        r"(?:DeepSeek|豆包|千问|通义千问|文心一言|文心|百度|阿里|腾讯|字节)",
+        r"(?:国务院|国家[\u4e00-\u9fff]{1,8}局|工信部|网信办|证监会|交易所)",
+    ]
+    entity_count = sum(len(re.findall(pattern, text)) for pattern in entity_patterns)
+    if entity_count >= 3:
+        sc_score += 8
+    elif entity_count >= 1:
+        sc_score += 5
+
+    scores["self_containment"] = min(sc_score, 25)
+
+    sr_score = 0
+    if sentences:
+        avg_chars = cjk_count / len(sentences)
+        if 25 <= avg_chars <= 80:
+            sr_score += 8
+        elif 15 <= avg_chars <= 110:
+            sr_score += 5
+        else:
+            sr_score += 2
+
+    if re.search(r"(第一|第二|第三|首先|其次|最后|一是|二是|三是)", text):
+        sr_score += 4
+    if re.search(r"(\d+[\.、)]|[一二三四五六七八九十]+[、.])", text):
+        sr_score += 4
+    if "\n" in text or re.search(r"(适用|不适用|风险|证据|来源|建议|步骤|对比)", text):
+        sr_score += 4
+
+    scores["structural_readability"] = min(sr_score, 20)
+
+    sd_score = 0
+    sd_score += min(len(re.findall(r"\d+(?:\.\d+)?%", text)) * 3, 5)
+    sd_score += min(len(re.findall(r"(?:¥|￥)?\d+(?:\.\d+)?\s*(?:元|万元|亿元)", text)) * 3, 5)
+    sd_score += min(len(re.findall(r"\b20\d{2}\s*年(?:\s*\d{1,2}\s*月(?:\s*\d{1,2}\s*日)?)?", text)) * 2, 4)
+    sd_score += min(len(re.findall(r"(?:GB/T|GB|JR/T|YY/T)\s*[\d\-]+", text)) * 3, 4)
+    sd_score += min(len(re.findall(r"(?:ICP备|统一社会信用代码|许可证编号|备案号)", text)) * 3, 4)
+    if re.search(r"(国务院|工信部|国家网信办|市场监管总局|人民法院|证监会|银保监|交易所)", text):
+        sd_score += 3
+
+    scores["statistical_density"] = min(sd_score, 15)
+
+    us_score = 0
+    if re.search(r"(我们(?:测试|调研|统计|分析|发现)|本次(?:测试|调研|统计)|样本|访谈|问卷)", text):
+        us_score += 5
+    if re.search(r"(案例|实测|复盘|客户|项目|落地|实践)", text):
+        us_score += 3
+    if re.search(r"(方法论|框架|模型|指标体系|评分规则)", text):
+        us_score += 2
+
+    scores["uniqueness_signals"] = min(us_score, 10)
+    return build_passage_result(
+        "cn_mainland",
+        text,
+        heading,
+        sum(scores.values()),
+        scores,
+        character_count=cjk_count,
+        sentence_count=len(sentences),
+    )
+
+
+def build_passage_result(
+    profile: str,
+    text: str,
+    heading: Optional[str],
+    total: int,
+    scores: dict,
+    word_count: Optional[int] = None,
+    character_count: Optional[int] = None,
+    sentence_count: Optional[int] = None,
+) -> dict:
+    """Build a normalized passage result payload."""
     if total >= 80:
         grade = "A"
         label = "Highly Citable"
@@ -233,19 +357,39 @@ def score_passage(text: str, heading: Optional[str] = None) -> dict:
         grade = "F"
         label = "Poor Citability"
 
-    return {
+    if profile == "cn_mainland":
+        compact = re.sub(r"\s+", "", text)
+        preview = compact[:80] + ("..." if len(compact) > 80 else "")
+    else:
+        words = text.split()
+        preview = " ".join(words[:30]) + ("..." if len(words) > 30 else "")
+
+    result = {
         "heading": heading,
-        "word_count": word_count,
+        "profile": profile,
         "total_score": total,
         "grade": grade,
         "label": label,
         "breakdown": scores,
-        "preview": " ".join(words[:30]) + ("..." if word_count > 30 else ""),
+        "preview": preview,
     }
+    if word_count is not None:
+        result["word_count"] = word_count
+    if character_count is not None:
+        result["character_count"] = character_count
+    if sentence_count is not None:
+        result["sentence_count"] = sentence_count
+    return result
 
 
-def analyze_page_citability(url: str) -> dict:
+def analyze_page_citability(url: str, profile: Optional[str] = None) -> dict:
     """Analyze all content blocks on a page for citability."""
+    if requests is None or BeautifulSoup is None:
+        return {
+            "error": "Page fetching requires optional packages: requests beautifulsoup4 lxml",
+            "profile": normalize_profile(profile),
+        }
+
     try:
         response = requests.get(
             url,
@@ -255,73 +399,60 @@ def analyze_page_citability(url: str) -> dict:
             timeout=30,
         )
         response.raise_for_status()
-    except Exception as e:
-        return {"error": f"Failed to fetch page: {str(e)}"}
+    except Exception as exc:
+        return {"error": f"Failed to fetch page: {str(exc)}"}
 
     soup = BeautifulSoup(response.text, "lxml")
 
-    # Remove non-content elements
-    for element in soup.find_all(
-        ["script", "style", "nav", "footer", "header", "aside", "form"]
-    ):
+    for element in soup.find_all(["script", "style", "nav", "footer", "header", "aside", "form"]):
         element.decompose()
 
-    # Extract content blocks
     blocks = []
     current_heading = "Introduction"
     current_paragraphs = []
 
     for element in soup.find_all(["h1", "h2", "h3", "h4", "p", "ul", "ol", "table"]):
         if element.name.startswith("h"):
-            # Save previous section
             if current_paragraphs:
                 combined = " ".join(current_paragraphs)
-                if len(combined.split()) >= 20:
-                    blocks.append(
-                        {"heading": current_heading, "content": combined}
-                    )
+                if len(combined.split()) >= 20 or count_cjk_chars(combined) >= 80:
+                    blocks.append({"heading": current_heading, "content": combined})
             current_heading = element.get_text(strip=True)
             current_paragraphs = []
         else:
             text = element.get_text(strip=True)
-            if text and len(text.split()) >= 5:
+            if text and (len(text.split()) >= 5 or count_cjk_chars(text) >= 20):
                 current_paragraphs.append(text)
 
-    # Last block
     if current_paragraphs:
         combined = " ".join(current_paragraphs)
-        if len(combined.split()) >= 20:
+        if len(combined.split()) >= 20 or count_cjk_chars(combined) >= 80:
             blocks.append({"heading": current_heading, "content": combined})
 
-    # Score each block
-    scored_blocks = []
-    for block in blocks:
-        score = score_passage(block["content"], block["heading"])
-        scored_blocks.append(score)
+    active_profile = normalize_profile(profile, " ".join(block["content"] for block in blocks))
+    scored_blocks = [score_passage(block["content"], block["heading"], active_profile) for block in blocks]
 
-    # Calculate page-level metrics
     if scored_blocks:
-        avg_score = sum(b["total_score"] for b in scored_blocks) / len(scored_blocks)
+        avg_score = sum(block["total_score"] for block in scored_blocks) / len(scored_blocks)
         top_blocks = sorted(scored_blocks, key=lambda x: x["total_score"], reverse=True)[:5]
         bottom_blocks = sorted(scored_blocks, key=lambda x: x["total_score"])[:5]
-
-        # Optimal passage count (134-167 words)
-        optimal_count = sum(
-            1 for b in scored_blocks if 134 <= b["word_count"] <= 167
-        )
+        if active_profile == "cn_mainland":
+            optimal_count = sum(1 for block in scored_blocks if 120 <= block.get("character_count", 0) <= 350)
+        else:
+            optimal_count = sum(1 for block in scored_blocks if 134 <= block.get("word_count", 0) <= 167)
     else:
         avg_score = 0
         top_blocks = []
         bottom_blocks = []
         optimal_count = 0
 
-    # Grade distribution
     grade_dist = {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}
     for block in scored_blocks:
         grade_dist[block["grade"]] += 1
 
     return {
         "url": url,
+        "profile": active_profile,
         "total_blocks_analyzed": len(scored_blocks),
         "average_citability_score": round(avg_score, 1),
         "optimal_length_passages": optimal_count,
@@ -334,10 +465,15 @@ def analyze_page_citability(url: str) -> dict:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python citability_scorer.py <url>")
+        print("Usage: python citability_scorer.py <url> [--profile global_default|cn_mainland]")
         print("Returns JSON with citability analysis for all content blocks.")
         sys.exit(1)
 
-    url = sys.argv[1]
-    result = analyze_page_citability(url)
-    print(json.dumps(result, indent=2, default=str))
+    cli_url = sys.argv[1]
+    cli_profile = None
+    if "--profile" in sys.argv:
+        idx = sys.argv.index("--profile")
+        if idx + 1 < len(sys.argv):
+            cli_profile = sys.argv[idx + 1]
+    result = analyze_page_citability(cli_url, cli_profile)
+    print(json.dumps(result, indent=2, default=str, ensure_ascii=False))

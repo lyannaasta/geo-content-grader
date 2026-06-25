@@ -1,23 +1,40 @@
 ---
 name: geo-content-grader
-description: Use when scoring, auditing, or improving an article for GEO, AI search visibility, AI citation readiness, LLM answer extraction, ChatGPT/Claude/Perplexity/Gemini discoverability, article GEO content scoring, or "文章 GEO 打分". Runs an article-first GEO scorecard using the local geo-seo-claude methodology while keeping citability, content, platform, and brand/entity checks separate.
+description: Use when scoring, auditing, or improving an article for GEO, AI search visibility, AI citation readiness, LLM answer extraction, ChatGPT/Claude/Perplexity/Gemini/DeepSeek/Doubao/Qwen/Wenxin discoverability, article GEO content scoring, or "文章 GEO 打分". Runs an article-first GEO scorecard with selectable global_default and cn_mainland profiles while keeping citability, content, platform, source/compliance, and brand/entity checks separate.
 ---
 
 # GEO Content Grader
 
 Use this skill when the user wants to score an article, draft, page, or content brief for Generative Engine Optimization (GEO): the likelihood that AI search systems can understand, extract, trust, cite, and recommend the article.
 
-This is a Codex-native article scoring entrypoint around the local repository:
+This is a Codex-native article scoring entrypoint around this skill package. It supports two scoring profiles:
 
-`/Users/amber/Documents/AI Content/geo-seo-claude`
+| GEO Profile | Use |
+|---|---|
+| `global_default` | Original global/English-oriented GEO logic with Google AI Overviews, ChatGPT Search, Perplexity, Gemini, and Bing Copilot. |
+| `cn_mainland` | Mainland China logic with Chinese citability thresholds, E-E-A-T-C, DeepSeek, Doubao, Qwen/Tongyi Qianwen, Wenxin/ERNIE Bot, mainland source authority, and mainland entity verification. |
 
-Reference the repo's scoring materials first:
+If the user specifies a profile, use that profile. If not specified, auto-detect:
 
-- `/Users/amber/Documents/AI Content/geo-seo-claude/skills/geo-citability/SKILL.md`
-- `/Users/amber/Documents/AI Content/geo-seo-claude/skills/geo-content/SKILL.md`
-- `/Users/amber/Documents/AI Content/geo-seo-claude/skills/geo-platform-optimizer/SKILL.md`
-- `/Users/amber/Documents/AI Content/geo-seo-claude/skills/geo-brand-mentions/SKILL.md`
-- `/Users/amber/Documents/AI Content/geo-seo-claude/scripts/citability_scorer.py`
+- Use `cn_mainland` when the article is primarily simplified Chinese, discusses mainland companies/products/policies, uses RMB, ICP/filing/licensing signals, mainland cities/provinces, or mainland regulatory context.
+- Use `global_default` for English/global content unless the user asks otherwise.
+
+Reference the local scoring materials first:
+
+- `profiles/global_default.yaml`
+- `profiles/cn_mainland.yaml`
+- `references/skills/geo-citability/SKILL.md`
+- `references/skills/geo-content/SKILL.md`
+- `references/skills/geo-platform-optimizer/SKILL.md`
+- `references/skills/geo-brand-mentions/SKILL.md`
+- `references/skills/geo-cn-citability/SKILL.md`
+- `references/skills/geo-cn-eeatc/SKILL.md`
+- `references/skills/geo-cn-platforms/SKILL.md`
+- `references/skills/geo-cn-source-authority/SKILL.md`
+- `references/skills/geo-cn-entity/SKILL.md`
+- `references/scripts/citability_scorer.py`
+- `references/scripts/evidence_adapters.py`
+- `references/scripts/source_evidence.py`
 
 Do not require Claude Code or `~/.claude`. Do not use Claude slash commands. Treat the files above as local references and reusable scoring logic.
 
@@ -30,9 +47,9 @@ Include:
 | Source Module | Include? | Article-First Scope |
 |---|---:|---|
 | `/geo citability` | Yes | Keep as an independent AI Citability scorecard. |
-| `/geo content` | Yes | Keep as an independent E-E-A-T, content quality, freshness, and originality scorecard. Fold only article-visible Article/Author/Date schema-equivalent signals here. |
-| `/geo platforms` | Partial | Keep as an independent AI Platform Fit scorecard using only content-pattern preferences from AIO, ChatGPT, Perplexity, Gemini, and Copilot. |
-| `/geo brand-mentions` | Partial | Keep as an independent Brand Entity Consistency scorecard. Do not run a full brand authority scan unless asked. |
+| `/geo content` | Yes | Keep as an independent E-E-A-T scorecard for `global_default`; use E-E-A-T-C for `cn_mainland`. Fold only article-visible Article/Author/Date schema-equivalent signals here. |
+| `/geo platforms` | Partial | Keep as an independent AI Platform Fit scorecard. Load the platform set from the selected profile. |
+| `/geo brand-mentions` | Partial | Keep as an independent Brand Entity Consistency scorecard. Under `cn_mainland`, use mainland public-source verification states and evidence availability. |
 
 Exclude:
 
@@ -48,13 +65,29 @@ Exclude:
 
 When the user provides one URL, local file, pasted draft, or article brief, run the article through these branches in order:
 
-1. **Citability Branch** from `/geo citability`
-2. **Content / E-E-A-T Branch** from `/geo content`
-3. **Platform Content Fit Branch** from the content-related parts of `/geo platforms`
-4. **Brand Entity Consistency Branch** from the article-relevant parts of `/geo brand-mentions`
-5. **Final Article GEO Summary** combining the independent branch scores
+1. **Resolve GEO Profile**: explicit user choice first, otherwise auto-detect `global_default` or `cn_mainland`.
+2. **Citability Branch**: use `/geo citability` for `global_default`; use `/geo-cn-citability` for `cn_mainland`.
+3. **Content / E-E-A-T Branch**: use `/geo content` for `global_default`; use `/geo-cn-eeatc` for `cn_mainland`.
+4. **Platform Content Fit Branch**: load the platform matrix from the selected profile.
+5. **Source / Compliance Evidence Branch**: for `cn_mainland`, apply `/geo-cn-source-authority` and compliance evidence rules.
+6. **Brand Entity Consistency Branch**: use `/geo brand-mentions` for `global_default`; use `/geo-cn-entity` and evidence states for `cn_mainland`.
+7. **Final Article GEO Summary** combining the independent branch scores.
 
 Keep the branch logic separate. Do not mix citability findings into the E-E-A-T score, do not mix platform preferences into the citability score, and do not let off-page brand authority dominate the article score.
+
+## Evidence Gate
+
+For `cn_mainland`, platform and entity verification must be evidence-based:
+
+- Platform verification should use configured adapters when credentials exist: `references/scripts/evidence_adapters.py`.
+- Public-source verification should fetch and classify source URLs when available: `references/scripts/source_evidence.py`.
+- Mainland published articles do not need to display raw URLs in the body. For `cn_mainland`, do not penalize missing visible article URLs when official/internal evidence records, screenshots, source labels, or audit notes are available to support the claim.
+- Missing credentials, blocked access, or failed platform calls must be marked `Limited`; do not infer platform visibility from model memory.
+- AI platform answers are `Observed` unless backed by source references/evidence records or corroborated by authoritative sources.
+- Brand/entity facts should prefer official websites, ICP/app filing records, enterprise credit records or licensed commercial APIs, official app stores, verified WeChat official accounts, regulatory/association/government pages, then Baidu Baike/mainstream media.
+- Preserve conflicts as `Conflicting`; do not average contradictory sources away.
+
+Evidence rows must include `platform/source`, `query`, `captured_at`, `status`, source reference or evidence record where available, `extracted_claims`, `confidence`, and `evidence_state`.
 
 ## Input Handling
 
@@ -67,7 +100,7 @@ Keep the branch logic separate. Do not mix citability findings into the E-E-A-T 
 
 ## Branch 1: AI Citability
 
-Use the original `/geo citability` rubric without changing its weights:
+Use the selected profile's citability rubric. The dimension weights stay stable:
 
 | Citability Dimension | Weight |
 |---|---:|
@@ -77,7 +110,7 @@ Use the original `/geo citability` rubric without changing its weights:
 | Statistical Density | 15% |
 | Uniqueness & Original Data | 10% |
 
-Evaluate:
+Evaluate for `global_default`:
 
 - Whether each major section opens with a 1-2 sentence direct answer.
 - Whether passages can be extracted and understood without surrounding context.
@@ -86,6 +119,14 @@ Evaluate:
 - Whether headings, lists, and tables make the article easy to segment.
 - Whether statistics, dates, named entities, and sources are present.
 - Whether the article contains original data, case studies, or unique examples.
+
+Evaluate additionally for `cn_mainland`:
+
+- Chinese passage length by character count, not English words: optimal 120-350 CJK characters, acceptable 80-500.
+- Whether H2/H3 sections open with Chinese answer patterns such as `X 是...`, `X 指...`, `X 适用于...`, `区别在于...`, `关键看...`.
+- Whether extracted passages repeat important Chinese entity names instead of relying on `它`, `这个`, `该平台`, `上述`, or `这些`.
+- Whether factual density includes RMB amounts, dates, mainland locations, policy names, standard numbers, ICP/filing identifiers, licenses, named regulators, courts, exchanges, and official bodies.
+- Whether the content uses Chinese extractable structures: question headings, definition paragraphs, tables, steps, FAQ, and `适用 / 不适用 / 风险 / 证据` matrices.
 
 Output for this branch:
 
@@ -98,7 +139,7 @@ Output for this branch:
 
 ## Branch 2: Content / E-E-A-T
 
-Use the original `/geo content` E-E-A-T logic as a separate branch. Keep the four E-E-A-T dimensions independent:
+Use the original `/geo content` E-E-A-T logic as a separate branch for `global_default`. Keep the four E-E-A-T dimensions independent:
 
 | Content Dimension | Max Points |
 |---|---:|
@@ -112,12 +153,24 @@ Evaluate article-visible signals:
 - First-hand experience: testing, implementation, screenshots, process notes, examples, case studies.
 - Expertise: author credentials, topical depth, accurate terminology, methodology, data-backed claims.
 - Authoritativeness: cited sources, external validation mentioned in the article, recognized entities, author/publisher credibility when visible.
-- Trustworthiness: visible author, publish/update dates, source links, disclosures, transparent claims, corrections/editorial cues when present.
+- Trustworthiness: visible author, publish/update dates, source attribution or evidence notes, disclosures, transparent claims, corrections/editorial cues when present. For `cn_mainland`, do not require raw URLs to be shown in the published article body.
 - Freshness: visible publish date and last updated date, especially for time-sensitive claims.
 - Low-quality AI content patterns: generic phrasing, filler, shallow sections, repeated conclusions, unsupported claims.
 - Article-visible schema-equivalent signals: author/byline, author qualifications, `datePublished`, `dateModified`, FAQ-like sections, HowTo-like steps, citations/sources, and clearly stated article topic/entity.
 
 Do not require actual JSON-LD for this branch. If schema or metadata cannot be seen from the article text, do not penalize heavily unless the article page itself is being audited and the user asked for page-level scoring.
+
+For `cn_mainland`, use E-E-A-T-C instead:
+
+| Dimension | Max Points |
+|---|---:|
+| Experience | 20 |
+| Expertise | 20 |
+| Authoritativeness | 20 |
+| Trustworthiness | 20 |
+| China Compliance & Context | 20 |
+
+The compliance dimension must check high-risk mainland contexts such as medical/health, finance/investment/insurance/lending, legal advice, education credentials/admissions, real estate, employment/labor, data/privacy/AI/algorithms, advertising claims, and consumer protection. Penalize unsupported absolute claims, unverified licenses, outdated policy references, missing disclaimers where needed, and failure to distinguish facts from opinion or promotion.
 
 Output for this branch:
 
@@ -131,9 +184,9 @@ Output for this branch:
 
 ## Branch 3: Platform Content Fit
 
-Use only the article-content portions of `/geo platforms`. Do not include platform presence, webmaster tools, crawler/index setup, page speed, IndexNow, Google Business Profile, YouTube channel ownership, Reddit account activity, or full Knowledge Graph work.
+Use only the article-content portions of the platform rubric unless the selected profile enables platform verification evidence. Do not include unrelated whole-site infrastructure in an article-first score.
 
-Score platform fit as an independent branch:
+For `global_default`, score platform fit as an independent branch:
 
 | Platform Content Subscore | Weight |
 |---|---:|
@@ -186,6 +239,53 @@ Bing Copilot:
 - Descriptive headings.
 - Concise, structured answers.
 
+For `cn_mainland`, score platform fit with this matrix:
+
+| Platform Content Subscore | Weight |
+|---|---:|
+| DeepSeek Content Fit | 30% |
+| Qwen / Tongyi Qianwen Content Fit | 25% |
+| Wenxin / ERNIE Bot Content Fit | 25% |
+| Doubao Content Fit | 20% |
+
+DeepSeek:
+
+- Clear thesis and conclusion.
+- Source chain and attribution.
+- Complex question coverage.
+- Data and factual density.
+- Transparent reasoning.
+- Counterexamples, boundaries, and limitations.
+
+Qwen / Tongyi Qianwen:
+
+- Structure and hierarchy.
+- Workplace reuse value.
+- Summary friendliness.
+- Tables, lists, frameworks.
+- Multimodal expansion potential.
+- Enterprise/industry context accuracy.
+
+Wenxin / ERNIE Bot:
+
+- Chinese knowledge QA fit.
+- Baidu/encyclopedic expression.
+- Authoritative source and freshness.
+- Entity clarity.
+- Chinese writing standard.
+- Multimodal support.
+
+Doubao:
+
+- Plain Chinese explanation.
+- Scenario-based framing.
+- Short answer extractability.
+- Actionable steps.
+- Rewrite/creation friendliness.
+- Conversational but accurate tone.
+
+When platform verification is possible, include a second column for verification state: `Verified / Observed / Conflicting / Limited`.
+
 Output for this branch:
 
 - `Platform Content Fit Score: XX/100`
@@ -227,8 +327,32 @@ Public-Domain Consistency:
 
 Citation / Attribution Support:
 
-- Claims about brands/entities are linked to or attributed to credible sources.
+- Claims about brands/entities are attributed to credible sources or supported by internal evidence records. For `cn_mainland`, raw URLs do not need to be visible in the published article body.
 - The article separates verified facts from interpretation or opinion.
+
+For `cn_mainland`, evaluate these entity facts when relevant:
+
+- Chinese full legal name.
+- English name, pinyin name, or abbreviation.
+- Brand name, product names, and versions.
+- Official domain.
+- Unified social credit code.
+- ICP filing subject.
+- App developer or publisher.
+- Mini-program or WeChat official account verification subject.
+- Legal representative, founder, or leadership when relevant.
+- Headquarters or operating region.
+- License, permit, certification, or filing number.
+- Founding, launch, publication, or update dates.
+
+Use evidence states:
+
+| State | Meaning |
+|---|---|
+| `Verified` | Confirmed by official, S/A-tier, or equivalent authoritative source. |
+| `Observed` | Seen in public/platform sources but not authoritative enough to verify. |
+| `Conflicting` | Sources disagree. |
+| `Limited` | Not enough accessible evidence. |
 
 Output for this branch:
 
@@ -242,7 +366,7 @@ Output for this branch:
 
 After scoring the independent branches, calculate a final score. Preserve branch independence in the report.
 
-Default weights when a brand/entity branch applies:
+Default `global_default` weights when a brand/entity branch applies:
 
 | Branch | Weight |
 |---|---:|
@@ -251,7 +375,7 @@ Default weights when a brand/entity branch applies:
 | Platform Content Fit | 20% |
 | Brand Entity Consistency | 10% |
 
-Default weights when the brand/entity branch is `N/A`:
+Default `global_default` weights when the brand/entity branch is `N/A`:
 
 | Branch | Weight |
 |---|---:|
@@ -277,6 +401,25 @@ AI Citability * 0.45
 + Content/E-E-A-T * 0.35
 + Platform Content Fit * 0.20
 ```
+
+Default `cn_mainland` weights when a brand/entity branch applies:
+
+| Branch | Weight |
+|---|---:|
+| Chinese AI Citability | 30% |
+| Content / E-E-A-T-C | 25% |
+| Mainland Platform Content Fit | 25% |
+| Source / Compliance Evidence | 10% |
+| Brand Entity Consistency | 10% |
+
+Default `cn_mainland` weights when the brand/entity branch is `N/A`:
+
+| Branch | Weight |
+|---|---:|
+| Chinese AI Citability | 35% |
+| Content / E-E-A-T-C | 30% |
+| Mainland Platform Content Fit | 25% |
+| Source / Compliance Evidence | 10% |
 
 ## Report File Output
 
@@ -304,12 +447,17 @@ strengths, deductions, fixes, and the overall judgment primarily in Chinese.
 ```markdown
 ## Article GEO Score: XX/100
 
+**GEO Profile:** global_default 或 cn_mainland
+**Profile Reason:** 用户指定 / 自动识别
+**Evidence Mode:** live_platform_queries / limited / content_only
+
 | Branch | Score | Weight | Weighted | Status |
 |---|---:|---:|---:|---|
-| AI Citability | XX/100 | 40% | XX | 强/中等/弱 |
-| Content / E-E-A-T | XX/100 | 30% | XX | 强/中等/弱 |
-| Platform Content Fit | XX/100 | 20% | XX | 强/中等/弱 |
-| Brand Entity Consistency | XX/100 或 N/A | 10% | XX | 强/中等/弱/不适用 |
+| AI Citability | XX/100 | 按 profile | XX | 强/中等/弱 |
+| Content / E-E-A-T 或 E-E-A-T-C | XX/100 | 按 profile | XX | 强/中等/弱 |
+| Platform Content Fit | XX/100 | 按 profile | XX | 强/中等/弱 |
+| Source / Compliance Evidence | XX/100 或 N/A | 按 profile | XX | 强/中等/弱/不适用 |
+| Brand Entity Consistency | XX/100 或 N/A | 按 profile | XX | 强/中等/弱/不适用 |
 
 **文件：** [输入文章文件名或 URL]
 
@@ -329,16 +477,21 @@ strengths, deductions, fixes, and the overall judgment primarily in Chinese.
 
 ### 2. Content / E-E-A-T: XX/100
 
+global_default 使用 E-E-A-T；cn_mainland 使用 E-E-A-T-C。
+
 | Dimension | Score | Max | Finding |
 |---|---:|---:|---|
-| Experience | XX | 25 | 中文说明一手经验、实测、案例、方法论是否充分 |
-| Expertise | XX | 25 | 中文说明实体关系、术语、边界解释、专业深度 |
-| Authoritativeness | XX | 25 | 中文说明官方、监管、公告、权威来源支撑 |
-| Trustworthiness | XX | 25 | 中文说明作者、发布时间、更新时间、披露、来源列表 |
+| Experience | XX | 25 或 20 | 中文说明一手经验、实测、案例、方法论是否充分 |
+| Expertise | XX | 25 或 20 | 中文说明实体关系、术语、边界解释、专业深度 |
+| Authoritativeness | XX | 25 或 20 | 中文说明官方、监管、公告、权威来源支撑 |
+| Trustworthiness | XX | 25 或 20 | 中文说明作者、发布时间、更新时间、披露、来源列表 |
+| China Compliance & Context | XX 或 N/A | 20 | cn_mainland 时说明大陆合规、资质、政策、广告/高风险行业风险 |
 
 用中文写一段简短判断，说明这篇文章在经验、专业性、权威性和可信度上的整体表现。保留必要的英文术语或页面栏目名，例如 `Key Facts`、`Deployment note`、`llms.txt entry`。
 
 ### 3. Platform Content Fit: XX/100
+
+global_default:
 
 | Platform | Content-Only Score | Main Gap |
 |---|---:|---|
@@ -348,15 +501,34 @@ strengths, deductions, fixes, and the overall judgment primarily in Chinese.
 | Gemini | XX/100 | 中文说明主要优势或缺口 |
 | Bing Copilot | XX/100 | 中文说明主要优势或缺口 |
 
+cn_mainland:
+
+| Platform | Content Fit Score | Verification State | Main Evidence / Gap |
+|---|---:|---|---|
+| DeepSeek | XX/100 | Verified/Observed/Conflicting/Limited | 中文说明推理、来源链、实体识别或验证缺口 |
+| Qwen / 通义千问 | XX/100 | Verified/Observed/Conflicting/Limited | 中文说明办公总结、结构化、企业语境或验证缺口 |
+| Wenxin / 文心一言 | XX/100 | Verified/Observed/Conflicting/Limited | 中文说明百科式表达、权威来源、时效或验证缺口 |
+| Doubao / 豆包 | XX/100 | Verified/Observed/Conflicting/Limited | 中文说明通俗解释、场景化、短答案或验证缺口 |
+
 **最值得补的是：** 用中文提出一个最能提升多平台适配度的内容补强点，例如实体关系图、流程图、图片 alt、原创数据、FAQ、摘要式开头等。
 
-### 4. Brand Entity Consistency: XX/100 或 N/A
+### 4. Source / Compliance Evidence: XX/100 或 N/A
+
+cn_mainland 必须输出；global_default 可在有限场景标 N/A。
+
+| Claim Type | Best Source Tier | Evidence State | Notes |
+|---|---|---|---|
+| 政策/监管/标准 | S/A/B/C/D 或 N/A | Verified/Observed/Conflicting/Limited | 中文说明证据是否足够 |
+| 资质/备案/主体 | S/A/B/C/D 或 N/A | Verified/Observed/Conflicting/Limited | 中文说明证据是否足够 |
+| 用户场景/口碑 | S/A/B/C/D 或 N/A | Verified/Observed/Conflicting/Limited | 中文说明证据是否足够 |
+
+### 5. Brand Entity Consistency: XX/100 或 N/A
 
 核心实体关系整体一致/存在以下风险：
 
-| Entity | Article Claim | Public Evidence | Match |
-|---|---|---|---|
-| 实体名 | 文章中的主张或描述 | 官方来源、监管页面、公告或可信公开证据 | Yes/No/Limited |
+| Entity | Article Claim | Public Evidence | Evidence State | Match |
+|---|---|---|---|---|
+| 实体名 | 文章中的主张或描述 | 官方来源、监管页面、公告或可信公开证据 | Verified/Observed/Conflicting/Limited | Yes/No/Limited |
 
 用中文补充说明是否存在实体名称、母子公司、品牌/产品、牌照、创始人、地区、发行方、收购关系等方面的不一致或需要澄清处。
 

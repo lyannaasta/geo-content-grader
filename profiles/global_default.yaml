@@ -1,0 +1,36 @@
+name: global_default
+description: Global GEO profile using the original platform and source assumptions.
+language:
+  primary: en
+  passage_unit: words
+  optimal_passage_words:
+    min: 134
+    max: 167
+  acceptable_passage_words:
+    min: 100
+    max: 200
+branches:
+  with_brand_entity:
+    citability: 40
+    content_eeat: 30
+    platform_fit: 20
+    brand_entity: 10
+  without_brand_entity:
+    citability: 45
+    content_eeat: 35
+    platform_fit: 20
+platforms:
+  google_ai_overviews:
+    weight: 30
+  chatgpt_search:
+    weight: 25
+  perplexity:
+    weight: 25
+  gemini:
+    weight: 10
+  bing_copilot:
+    weight: 10
+evidence:
+  platform_queries: optional
+  authoritative_source_check: optional
+  unavailable_behavior: limited

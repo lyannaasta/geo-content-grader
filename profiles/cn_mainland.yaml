@@ -1,0 +1,127 @@
+name: cn_mainland
+description: China mainland GEO profile for Chinese articles and mainland entity verification.
+language:
+  primary: zh-CN
+  passage_unit: characters
+  optimal_passage_chars:
+    min: 120
+    max: 350
+  acceptable_passage_chars:
+    min: 80
+    max: 500
+  answer_opening_sentences:
+    min: 1
+    max: 2
+branches:
+  with_brand_entity:
+    citability: 30
+    eeatc: 25
+    platform_fit: 25
+    source_compliance: 10
+    brand_entity: 10
+  without_brand_entity:
+    citability: 35
+    eeatc: 30
+    platform_fit: 25
+    source_compliance: 10
+platforms:
+  deepseek:
+    weight: 30
+    adapter: deepseek
+    verification_focus:
+      - reasoning_consistency
+      - source_chain
+      - entity_claims
+    query_templates:
+      - "{entity} 是什么公司 官网 产品 创始人"
+      - "{entity} 所属公司 备案 主体"
+      - "{topic} 权威来源 政策 标准 数据"
+  doubao:
+    weight: 20
+    adapter: doubao
+    verification_focus:
+      - plain_language_entity_understanding
+      - scenario_fit
+      - factual_drift
+    query_templates:
+      - "{entity} 是什么 有什么用"
+      - "{entity} 产品 属于哪个公司"
+      - "{topic} 怎么做 注意事项"
+  qwen:
+    weight: 25
+    adapter: qwen
+    verification_focus:
+      - structured_summary
+      - workplace_reuse
+      - enterprise_entity_claims
+    query_templates:
+      - "整理 {entity} 的公司 主体 官网 产品 信息"
+      - "用表格对比 {topic} 的关键事实 来源 风险"
+      - "{topic} 行业报告 官方数据 来源"
+  wenxin:
+    weight: 25
+    adapter: wenxin
+    verification_focus:
+      - chinese_knowledge_qa
+      - baidu_ecosystem_entity_clarity
+      - authoritative_source_freshness
+    query_templates:
+      - "{entity} 百度百科 官网 主体"
+      - "{entity} 是什么 公司 产品"
+      - "{topic} 最新 政策 官方 来源"
+evidence:
+  platform_queries: enabled_when_credentials_exist
+  authoritative_source_check: required_when_brand_entity_applies
+  visible_article_urls_required: false
+  allow_internal_evidence_records: true
+  save_evidence: true
+  unavailable_behavior: limited
+  evidence_gate:
+    require_source_or_evidence_for_factual_claim: true
+    require_capture_timestamp: true
+    model_answer_without_sources_state: observed
+    failed_platform_query_state: limited
+    conflicting_sources_state: conflicting
+  output_fields:
+    - platform
+    - query
+    - captured_at
+    - status
+    - source_references
+    - snippets
+    - extracted_claims
+    - confidence
+    - evidence_state
+source_authority:
+  S:
+    - government
+    - regulator
+    - court
+    - national_standard
+    - exchange_disclosure
+  A:
+    - official_site
+    - listed_company_disclosure
+    - university
+    - research_institute
+    - tier_3_hospital
+    - industry_association
+    - central_state_media
+  B:
+    - mainstream_media
+    - verified_wechat_official_account
+    - baidu_baike
+    - company_whitepaper
+    - leading_industry_media
+  C:
+    - zhihu
+    - xiaohongshu
+    - bilibili
+    - douyin
+    - forum
+    - community_discussion
+  D:
+    - scraper_site
+    - rewritten_article_farm
+    - anonymous_soft_ad
+    - low_quality_ai_aggregate
