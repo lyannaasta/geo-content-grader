@@ -1,0 +1,4 @@
+interface:
+  display_name: "GEO Content Grader"
+  short_description: "Score article GEO and AI citation readiness."
+  default_prompt: "Use $geo-content-grader to score this article for GEO and AI citation readiness."

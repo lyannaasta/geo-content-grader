@@ -23,15 +23,15 @@ Reference the local scoring materials first:
 
 - `profiles/global_default.yaml`
 - `profiles/cn_mainland.yaml`
-- `references/skills/geo-citability/SKILL.md`
-- `references/skills/geo-content/SKILL.md`
-- `references/skills/geo-platform-optimizer/SKILL.md`
-- `references/skills/geo-brand-mentions/SKILL.md`
-- `references/skills/geo-cn-citability/SKILL.md`
-- `references/skills/geo-cn-eeatc/SKILL.md`
-- `references/skills/geo-cn-platforms/SKILL.md`
-- `references/skills/geo-cn-source-authority/SKILL.md`
-- `references/skills/geo-cn-entity/SKILL.md`
+- `references/rubrics/geo-citability.md`
+- `references/rubrics/geo-content.md`
+- `references/rubrics/geo-platform-optimizer.md`
+- `references/rubrics/geo-brand-mentions.md`
+- `references/rubrics/geo-cn-citability.md`
+- `references/rubrics/geo-cn-eeatc.md`
+- `references/rubrics/geo-cn-platforms.md`
+- `references/rubrics/geo-cn-source-authority.md`
+- `references/rubrics/geo-cn-entity.md`
 - `references/scripts/citability_scorer.py`
 - `references/scripts/evidence_adapters.py`
 - `references/scripts/source_evidence.py`
