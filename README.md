@@ -7,23 +7,25 @@ the referenced scoring materials it depends on. The grader is now profile-aware:
 one shared article-first pipeline can load either the original global rules or a
 China mainland localization profile.
 
+Install or copy the `geo-content-grader/` directory itself as the skill.
+
 ## Contents
 
 - `geo-content-grader/SKILL.md` - Codex-native article scoring entrypoint.
-- `profiles/global_default.yaml` - original global scoring profile.
-- `profiles/cn_mainland.yaml` - China mainland scoring profile.
-- `references/skills/geo-citability/SKILL.md` - AI citability rubric.
-- `references/skills/geo-content/SKILL.md` - E-E-A-T and content quality rubric.
-- `references/skills/geo-platform-optimizer/SKILL.md` - platform optimization rubric.
-- `references/skills/geo-brand-mentions/SKILL.md` - brand/entity reference rubric.
-- `references/skills/geo-cn-citability/SKILL.md` - Chinese mainland citability rubric.
-- `references/skills/geo-cn-eeatc/SKILL.md` - mainland E-E-A-T-C rubric.
-- `references/skills/geo-cn-platforms/SKILL.md` - DeepSeek, Doubao, Qwen, and Wenxin platform fit rubric.
-- `references/skills/geo-cn-source-authority/SKILL.md` - mainland source authority tiers.
-- `references/skills/geo-cn-entity/SKILL.md` - mainland brand/entity consistency rubric.
-- `references/scripts/citability_scorer.py` - reusable citability scoring script from the source repo.
-- `references/scripts/evidence_adapters.py` - platform evidence adapter entrypoint with Limited fallback.
-- `references/scripts/source_evidence.py` - public source fetcher, source-tier classifier, and lightweight entity extractor.
+- `geo-content-grader/profiles/global_default.yaml` - original global scoring profile.
+- `geo-content-grader/profiles/cn_mainland.yaml` - China mainland scoring profile.
+- `geo-content-grader/references/rubrics/geo-citability.md` - AI citability rubric.
+- `geo-content-grader/references/rubrics/geo-content.md` - E-E-A-T and content quality rubric.
+- `geo-content-grader/references/rubrics/geo-platform-optimizer.md` - platform optimization rubric.
+- `geo-content-grader/references/rubrics/geo-brand-mentions.md` - brand/entity reference rubric.
+- `geo-content-grader/references/rubrics/geo-cn-citability.md` - Chinese mainland citability rubric.
+- `geo-content-grader/references/rubrics/geo-cn-eeatc.md` - mainland E-E-A-T-C rubric.
+- `geo-content-grader/references/rubrics/geo-cn-platforms.md` - DeepSeek, Doubao, Qwen, and Wenxin platform fit rubric.
+- `geo-content-grader/references/rubrics/geo-cn-source-authority.md` - mainland source authority tiers.
+- `geo-content-grader/references/rubrics/geo-cn-entity.md` - mainland brand/entity consistency rubric.
+- `geo-content-grader/references/scripts/citability_scorer.py` - reusable citability scoring script from the source repo.
+- `geo-content-grader/references/scripts/evidence_adapters.py` - platform evidence adapter entrypoint with Limited fallback.
+- `geo-content-grader/references/scripts/source_evidence.py` - public source fetcher, source-tier classifier, and lightweight entity extractor.
 
 ## Source Provenance
 
@@ -58,7 +60,7 @@ specified explicitly in the user request.
 The citability script supports profile selection:
 
 ```bash
-python references/scripts/citability_scorer.py "https://example.com/article" --profile cn_mainland
+python geo-content-grader/references/scripts/citability_scorer.py "https://example.com/article" --profile cn_mainland
 ```
 
 The evidence adapter script runs configured platform probes and returns
@@ -66,7 +68,7 @@ structured evidence. Missing credentials or failed platform access returns
 `Limited` instead of fabricated evidence:
 
 ```bash
-python references/scripts/evidence_adapters.py \
+python geo-content-grader/references/scripts/evidence_adapters.py \
   --platform deepseek \
   --query "某品牌 是什么公司 官网 产品 创始人"
 ```
@@ -75,7 +77,7 @@ The source evidence script fetches public URLs and classifies them into the
 mainland source ladder used by `cn_mainland`:
 
 ```bash
-python references/scripts/source_evidence.py "https://www.example.com/about"
+python geo-content-grader/references/scripts/source_evidence.py "https://www.example.com/about"
 ```
 
 Supported credential environment variables include:
